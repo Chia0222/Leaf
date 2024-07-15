@@ -24,9 +24,13 @@ class LeafDataset(data.Dataset):
         labels = []
         with open(osp.join(opt.dataset_dir, opt.dataset_list), 'r') as f:
             for line in f.readlines():
-                img_name, label = line.strip().split()
-                img_names.append(img_name)
-                labels.append(label)
+                parts = line.strip().rsplit(' ', 1)  # Split from the right, only once
+                if len(parts) != 2:
+                    print(f"Error: Line '{line.strip()}' does not have exactly 2 parts")
+                else:
+                    img_name, label = parts
+                    img_names.append(img_name)
+                    labels.append(label)
 
         self.img_names = img_names
         self.labels = labels
@@ -49,7 +53,6 @@ class LeafDataset(data.Dataset):
 
     def __len__(self):
         return len(self.img_names)
-
 
 
 class VITONDataLoader:
@@ -77,13 +80,27 @@ class VITONDataLoader:
 
         return batch
 
-with open(osp.join(opt.dataset_dir, opt.dataset_list), 'r') as f:
-    for line in f.readlines():
-        parts = line.strip().rsplit(' ', 1)  # Split from the right, only once
-        if len(parts) != 2:
-            print(f"Error: Line '{line.strip()}' does not have exactly 2 parts")
-        else:
-            img_name, label = parts
-            img_names.append(img_name)
-            labels.append(label)
 
+# Example of an Options class
+class Options:
+    def __init__(self):
+        self.load_height = 256
+        self.load_width = 256
+        self.dataset_dir = '/path/to/dataset'
+        self.dataset_list = 'dataset_list.txt'
+        self.dataset_mode = 'train'
+        self.batch_size = 32
+        self.workers = 4
+        self.shuffle = True
+
+# Create options instance
+opt = Options()
+
+# Initialize the dataset
+dataset = LeafDataset(opt)
+
+# Initialize the data loader
+data_loader = VITONDataLoader(opt, dataset)
+
+# Get the next batch
+batch = data_loader.next_batch()
