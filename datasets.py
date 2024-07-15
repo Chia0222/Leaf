@@ -7,13 +7,12 @@ import torch
 from torch.utils import data
 from torchvision import transforms
 
-
 class LeafDataset(data.Dataset):
     def __init__(self, opt):
         super(LeafDataset, self).__init__()
         self.load_height = opt.load_height
         self.load_width = opt.load_width
-        self.data_path = osp.join(opt.dataset_dir, opt.dataset_mode)
+        self.data_path = osp.join(opt.dataset_dir, 'segmented')  # Adjusted path
         self.transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
@@ -34,12 +33,12 @@ class LeafDataset(data.Dataset):
         img1_name, img2_name = self.img_pairs[index]
 
         # load leaf images
-        img1 = Image.open(osp.join(self.data_path, 'images', img1_name)).convert('RGB')
-        img1 = transforms.Resize(self.load_width, interpolation=2)(img1)
+        img1 = Image.open(osp.join(self.data_path, img1_name)).convert('RGB')  # Adjusted path
+        img1 = transforms.Resize((self.load_width, self.load_height), interpolation=2)(img1)
         img1 = self.transform(img1)  # [-1,1]
 
-        img2 = Image.open(osp.join(self.data_path, 'images', img2_name)).convert('RGB')
-        img2 = transforms.Resize(self.load_width, interpolation=2)(img2)
+        img2 = Image.open(osp.join(self.data_path, img2_name)).convert('RGB')  # Adjusted path
+        img2 = transforms.Resize((self.load_width, self.load_height), interpolation=2)(img2)
         img2 = self.transform(img2)  # [-1,1]
 
         result = {
@@ -85,9 +84,8 @@ class Options:
     def __init__(self):
         self.load_height = 256
         self.load_width = 256
-        self.dataset_dir = 'datasets'
+        self.dataset_dir = './datasets'
         self.dataset_list = 'test_pairs.txt'
-        self.dataset_mode = 'test'
         self.batch_size = 32
         self.workers = 4
         self.shuffle = True
@@ -116,3 +114,4 @@ for i, batch in enumerate(data_loader.data_loader):
     print(f"Batch {i} loaded successfully.")
     if i >= 2:  # Limit the number of batches printed
         break
+
