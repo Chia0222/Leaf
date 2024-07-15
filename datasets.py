@@ -76,3 +76,14 @@ class VITONDataLoader:
             batch = self.data_iter.__next__()
 
         return batch
+
+with open(osp.join(opt.dataset_dir, opt.dataset_list), 'r') as f:
+    for line in f.readlines():
+        parts = line.strip().rsplit(' ', 1)  # Split from the right, only once
+        if len(parts) != 2:
+            print(f"Error: Line '{line.strip()}' does not have exactly 2 parts")
+        else:
+            img_name, label = parts
+            img_names.append(img_name)
+            labels.append(label)
+
