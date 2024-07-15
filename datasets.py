@@ -54,9 +54,12 @@ class LeafDataset(data.Dataset):
         return result
 
     def _find_image_path(self, img_name):
+        # Iterate through subdirectories to find the image
         for root, dirs, files in os.walk(self.data_dir):
-            if img_name in files:
-                return osp.join(root, img_name)
+            for dir_name in dirs:
+                subdir_path = osp.join(root, dir_name)
+                if img_name in files:
+                    return osp.join(subdir_path, img_name)
 
         raise FileNotFoundError(f"Image '{img_name}' not found in '{self.data_dir}'.")
 
