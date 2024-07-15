@@ -7,7 +7,6 @@ import torch
 from torch.utils import data
 from torchvision import transforms
 
-
 class LeafDataset(data.Dataset):
     def __init__(self, opt):
         super(LeafDataset, self).__init__()
@@ -86,9 +85,9 @@ class Options:
     def __init__(self):
         self.load_height = 256
         self.load_width = 256
-        self.dataset_dir = '/path/to/dataset'
-        self.dataset_list = 'dataset_list.txt'
-        self.dataset_mode = 'train'
+        self.dataset_dir = 'datasets'
+        self.dataset_list = 'test_pairs.txt'
+        self.dataset_mode = 'test'
         self.batch_size = 32
         self.workers = 4
         self.shuffle = True
