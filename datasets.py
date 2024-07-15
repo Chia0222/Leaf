@@ -34,6 +34,8 @@ class LeafDataset(data.Dataset):
         self.img_names = img_names
         self.labels = labels
 
+        print(f"Loaded {len(self.img_names)} samples.")
+
     def __getitem__(self, index):
         img_name = self.img_names[index]
         label = self.labels[index]
@@ -98,8 +100,22 @@ opt = Options()
 # Initialize the dataset
 dataset = LeafDataset(opt)
 
+# Verify dataset length
+print(f"Dataset length: {len(dataset)}")
+
 # Initialize the data loader
 data_loader = VITONDataLoader(opt, dataset)
 
-# Get the next batch
-batch = data_loader.next_batch()
+# Check for batches
+try:
+    batch = data_loader.next_batch()
+    print("Batch loaded successfully.")
+except StopIteration:
+    print("No more batches available.")
+
+# Optionally, loop through the data loader to ensure it works correctly
+for i, batch in enumerate(data_loader.data_loader):
+    print(f"Batch {i} loaded successfully.")
+    if i >= 2:  # Limit the number of batches printed
+        break
+
