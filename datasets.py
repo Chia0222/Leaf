@@ -7,6 +7,7 @@ import torch
 from torch.utils import data
 from torchvision import transforms
 
+
 class LeafDataset(data.Dataset):
     def __init__(self, opt):
         super(LeafDataset, self).__init__()
@@ -19,41 +20,38 @@ class LeafDataset(data.Dataset):
         ])
 
         # load data list
-        img_names = []
-        labels = []
+        img_pairs = []
         with open(osp.join(opt.dataset_dir, opt.dataset_list), 'r') as f:
             for line in f.readlines():
-                parts = line.strip().rsplit(' ', 1)  # Split from the right, only once
-                if len(parts) != 2:
-                    print(f"Error: Line '{line.strip()}' does not have exactly 2 parts")
-                else:
-                    img_name, label = parts
-                    img_names.append(img_name)
-                    labels.append(label)
+                img1_name, img2_name = line.strip().split(' ', 1)  # Split only once from the left
+                img_pairs.append((img1_name, img2_name))
 
-        self.img_names = img_names
-        self.labels = labels
+        self.img_pairs = img_pairs
 
-        print(f"Loaded {len(self.img_names)} samples.")
+        print(f"Loaded {len(self.img_pairs)} image pairs.")
 
     def __getitem__(self, index):
-        img_name = self.img_names[index]
-        label = self.labels[index]
+        img1_name, img2_name = self.img_pairs[index]
 
-        # load leaf image
-        img = Image.open(osp.join(self.data_path, 'images', img_name)).convert('RGB')
-        img = transforms.Resize(self.load_width, interpolation=2)(img)
-        img = self.transform(img)  # [-1,1]
+        # load leaf images
+        img1 = Image.open(osp.join(self.data_path, 'images', img1_name)).convert('RGB')
+        img1 = transforms.Resize(self.load_width, interpolation=2)(img1)
+        img1 = self.transform(img1)  # [-1,1]
+
+        img2 = Image.open(osp.join(self.data_path, 'images', img2_name)).convert('RGB')
+        img2 = transforms.Resize(self.load_width, interpolation=2)(img2)
+        img2 = self.transform(img2)  # [-1,1]
 
         result = {
-            'img_name': img_name,
-            'img': img,
-            'label': label
+            'img1_name': img1_name,
+            'img1': img1,
+            'img2_name': img2_name,
+            'img2': img2
         }
         return result
 
     def __len__(self):
-        return len(self.img_names)
+        return len(self.img_pairs)
 
 
 class VITONDataLoader:
@@ -118,4 +116,3 @@ for i, batch in enumerate(data_loader.data_loader):
     print(f"Batch {i} loaded successfully.")
     if i >= 2:  # Limit the number of batches printed
         break
-
