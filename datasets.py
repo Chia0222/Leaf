@@ -1,9 +1,8 @@
-import json
-from os import path as osp
 import os
+from os import path as osp
 
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image
 import torch
 from torch.utils import data
 from torchvision import transforms
@@ -54,12 +53,13 @@ class LeafDataset(data.Dataset):
         return result
 
     def _find_image_path(self, img_name):
-        # Iterate through subdirectories to find the image
-        for root, dirs, files in os.walk(self.data_dir):
-            for dir_name in dirs:
-                subdir_path = osp.join(root, dir_name)
-                if img_name in files:
-                    return osp.join(subdir_path, img_name)
+        # Iterate through subdirectories (labels) to find the image
+        for label_folder in os.listdir(self.data_dir):
+            label_folder_path = osp.join(self.data_dir, label_folder)
+            if osp.isdir(label_folder_path):
+                for root, dirs, files in os.walk(label_folder_path):
+                    if img_name in files:
+                        return osp.join(root, img_name)
 
         raise FileNotFoundError(f"Image '{img_name}' not found in '{self.data_dir}'.")
 
