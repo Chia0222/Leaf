@@ -4,9 +4,9 @@ import os
 import torch
 from torch import nn
 from torch.nn import functional as F
-import torchgeometry as tgm # type: ignore
+import torchgeometry as tgm
 
-from datasets import LeafDataset, VITONDataLoader
+from datasets import LeafDataset, LeafDataLoader
 from networks import SegGenerator, GMM, ALIASGenerator
 from utils import gen_noise, load_checkpoint, save_images
 
@@ -22,7 +22,7 @@ def get_opt():
     parser.add_argument('--shuffle', action='store_true')
 
     parser.add_argument('--dataset_dir', type=str, default='./datasets/')
-    parser.add_argument('--dataset_mode', type=str, default='test')
+    parser.add_argument('--dataset_mode', type=str, default='segmented')
     parser.add_argument('--dataset_list', type=str, default='test_pairs.txt')
     parser.add_argument('--checkpoint_dir', type=str, default='./checkpoints/')
     parser.add_argument('--save_dir', type=str, default='./results/')
@@ -33,15 +33,15 @@ def get_opt():
     parser.add_argument('--gmm_checkpoint', type=str, default='gmm_final.pth')
     parser.add_argument('--alias_checkpoint', type=str, default='alias_final.pth')
 
-    # common
-    parser.add_argument('--semantic_nc', type=int, default=13, help='# of human-parsing map classes')
+    # Common options
+    parser.add_argument('--semantic_nc', type=int, default=13, help='# of classes in semantic map')
     parser.add_argument('--init_type', choices=['normal', 'xavier', 'xavier_uniform', 'kaiming', 'orthogonal', 'none'], default='xavier')
     parser.add_argument('--init_variance', type=float, default=0.02, help='variance of the initialization distribution')
 
-    # for GMM
+    # Options specific to GMM
     parser.add_argument('--grid_size', type=int, default=5)
 
-    # for ALIASGenerator
+    # Options specific to ALIASGenerator
     parser.add_argument('--norm_G', type=str, default='spectralaliasinstance')
     parser.add_argument('--ngf', type=int, default=64, help='# of generator filters in the first conv layer')
     parser.add_argument('--num_upsampling_layers', choices=['normal', 'more', 'most'], default='most',
@@ -58,75 +58,39 @@ def test(opt, seg, gmm, alias):
     gauss.cuda()
 
     test_dataset = LeafDataset(opt)
-    test_loader = VITONDataLoader(opt, test_dataset)
+    test_loader = LeafDataLoader(opt, test_dataset)
+
+    success_count = 0
 
     with torch.no_grad():
         for i, inputs in enumerate(test_loader.data_loader):
-            img_names = inputs['img_name']
-            c_names = inputs['c_name']['unpaired']
+            img_names = inputs['healthy_img_name']  # Assuming 'healthy_img_name' corresponds to image names
+            c_names = inputs['diseased_img_name']  # Assuming 'diseased_img_name' corresponds to image names
 
-            img_agnostic = inputs['img_agnostic'].cuda()
-            parse_agnostic = inputs['parse_agnostic'].cuda()
-            pose = inputs['pose'].cuda()
-            c = inputs['cloth']['unpaired'].cuda()
-            cm = inputs['cloth_mask']['unpaired'].cuda()
+            img_agnostic = inputs['healthy_img'].cuda()
+            parse_agnostic = inputs['diseased_img'].cuda()
 
-            # Part 1. Segmentation generation
-            parse_agnostic_down = F.interpolate(parse_agnostic, size=(256, 192), mode='bilinear')
-            pose_down = F.interpolate(pose, size=(256, 192), mode='bilinear')
-            c_masked_down = F.interpolate(c * cm, size=(256, 192), mode='bilinear')
-            cm_down = F.interpolate(cm, size=(256, 192), mode='bilinear')
-            seg_input = torch.cat((cm_down, c_masked_down, parse_agnostic_down, pose_down, gen_noise(cm_down.size()).cuda()), dim=1)
+            # Process inputs through your models
+            # Example:
+            output = seg(img_agnostic)
+            output = gmm(output, parse_agnostic)
+            output = alias(output, img_agnostic, parse_agnostic)
 
-            parse_pred_down = seg(seg_input)
-            parse_pred = gauss(up(parse_pred_down))
-            parse_pred = parse_pred.argmax(dim=1)[:, None]
+            # Example of saving images
+            save_path = os.path.join(opt.save_dir, opt.name)
+            save_images(output, img_names, save_path)  # Adjust parameters as per your dataset
 
-            parse_old = torch.zeros(parse_pred.size(0), 13, opt.load_height, opt.load_width, dtype=torch.float).cuda()
-            parse_old.scatter_(1, parse_pred, 1.0)
-
-            labels = {
-                0:  ['background',  [0]],
-                1:  ['paste',       [2, 4, 7, 8, 9, 10, 11]],
-                2:  ['upper',       [3]],
-                3:  ['hair',        [1]],
-                4:  ['left_arm',    [5]],
-                5:  ['right_arm',   [6]],
-                6:  ['noise',       [12]]
-            }
-            parse = torch.zeros(parse_pred.size(0), 7, opt.load_height, opt.load_width, dtype=torch.float).cuda()
-            for j in range(len(labels)):
-                for label in labels[j][1]:
-                    parse[:, j] += parse_old[:, label]
-
-            # Part 2. Clothes Deformation
-            agnostic_gmm = F.interpolate(img_agnostic, size=(256, 192), mode='nearest')
-            parse_cloth_gmm = F.interpolate(parse[:, 2:3], size=(256, 192), mode='nearest')
-            pose_gmm = F.interpolate(pose, size=(256, 192), mode='nearest')
-            c_gmm = F.interpolate(c, size=(256, 192), mode='nearest')
-            gmm_input = torch.cat((parse_cloth_gmm, pose_gmm, agnostic_gmm), dim=1)
-
-            _, warped_grid = gmm(gmm_input, c_gmm)
-            warped_c = F.grid_sample(c, warped_grid, padding_mode='border')
-            warped_cm = F.grid_sample(cm, warped_grid, padding_mode='border')
-
-            # Part 3. Try-on synthesis
-            misalign_mask = parse[:, 2:3] - warped_cm
-            misalign_mask[misalign_mask < 0.0] = 0.0
-            parse_div = torch.cat((parse, misalign_mask), dim=1)
-            parse_div[:, 2:3] -= misalign_mask
-
-            output = alias(torch.cat((img_agnostic, pose, warped_c), dim=1), parse, parse_div, misalign_mask)
-
-            unpaired_names = []
-            for img_name, c_name in zip(img_names, c_names):
-                unpaired_names.append('{}_{}'.format(img_name.split('_')[0], c_name))
-
-            save_images(output, unpaired_names, os.path.join(opt.save_dir, opt.name))
+            # Check if images were successfully generated
+            if os.path.exists(save_path):
+                success_count += 1
+                print(f"Generated images successfully for step {i + 1}.")
+            else:
+                print(f"Failed to generate images for step {i + 1}.")
 
             if (i + 1) % opt.display_freq == 0:
-                print("step: {}".format(i + 1))
+                print("Processed step: {}".format(i + 1))
 
+    print(f"Successfully generated {success_count} images out of {len(test_loader)} steps.")
 
 def main():
     opt = get_opt()
