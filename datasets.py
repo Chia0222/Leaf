@@ -20,7 +20,7 @@ class LeafDataset(data.Dataset):
 
         # Load data pairs list
         self.pairs = []
-        with open(osp.join(self.data_path, 'image_list.txt'), 'r') as f:
+        with open(osp.join(self.data_path, 'test_pairs.txt'), 'r') as f:
             for line in f.readlines():
                 self.pairs.append(line.strip().split())
 
