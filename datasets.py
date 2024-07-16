@@ -22,7 +22,13 @@ class LeafDataset(data.Dataset):
         self.pairs = []
         with open(osp.join(self.data_path, 'test_pairs.txt'), 'r') as f:
             for line in f.readlines():
-                self.pairs.append(line.strip().split())
+                # Split line into two parts based on the first space encountered
+                parts = line.strip().split(' ', 1)
+                if len(parts) == 2:
+                    healthy_img_name, diseased_img_name = parts
+                    self.pairs.append((healthy_img_name, diseased_img_name))
+                else:
+                    print(f"Ignoring invalid line in test_pairs.txt: {line}")
 
     def __getitem__(self, index):
         healthy_img_name, diseased_img_name = self.pairs[index]
@@ -77,7 +83,7 @@ class Options:
     def __init__(self):
         self.load_height = 256
         self.load_width = 192
-        self.dataset_dir = 'path/to/leaf_dataset'
+        self.dataset_dir = 'datasets'
         self.dataset_mode = 'segmented'
         self.batch_size = 4
         self.workers = 4
@@ -100,4 +106,3 @@ print(batch['healthy_img_name'])
 print(batch['diseased_img_name'])
 print(batch['healthy_img'].shape)
 print(batch['diseased_img'].shape)
-
