@@ -1,6 +1,5 @@
-import os
+import json
 from os import path as osp
-
 import numpy as np
 from PIL import Image
 import torch
@@ -12,64 +11,45 @@ class LeafDataset(data.Dataset):
         super(LeafDataset, self).__init__()
         self.load_height = opt.load_height
         self.load_width = opt.load_width
-        self.data_dir = osp.join(opt.dataset_dir, 'segmented')  # Adjusted path to segmented folder
+        self.data_path = osp.join(opt.dataset_dir, opt.dataset_mode)
         self.transform = transforms.Compose([
+            transforms.Resize((self.load_height, self.load_width)),
             transforms.ToTensor(),
             transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
 
-        # Load data list
-        img_pairs = []
-        with open(osp.join(opt.dataset_dir, opt.dataset_list), 'r') as f:
+        # Load data pairs list
+        self.pairs = []
+        with open(osp.join(self.data_path, 'image_list.txt'), 'r') as f:
             for line in f.readlines():
-                img1_name, img2_name = line.strip().split(' ', 1)  # Split only once from the left
-                img_pairs.append((img1_name, img2_name))
-
-        self.img_pairs = img_pairs
-
-        print(f"Loaded {len(self.img_pairs)} image pairs.")
+                self.pairs.append(line.strip().split())
 
     def __getitem__(self, index):
-        img1_name, img2_name = self.img_pairs[index]
+        healthy_img_name, diseased_img_name = self.pairs[index]
 
-        # Load leaf images from segmented folders
-        img1_path = self._find_image_path(img1_name)
-        img2_path = self._find_image_path(img2_name)
+        # Load healthy image
+        healthy_img = Image.open(osp.join(self.data_path, healthy_img_name)).convert('RGB')
+        healthy_img = self.transform(healthy_img)
 
-        img1 = Image.open(img1_path).convert('RGB')
-        img1 = transforms.Resize((self.load_width, self.load_height), interpolation=2)(img1)
-        img1 = self.transform(img1)  # [-1,1]
-
-        img2 = Image.open(img2_path).convert('RGB')
-        img2 = transforms.Resize((self.load_width, self.load_height), interpolation=2)(img2)
-        img2 = self.transform(img2)  # [-1,1]
+        # Load diseased image
+        diseased_img = Image.open(osp.join(self.data_path, diseased_img_name)).convert('RGB')
+        diseased_img = self.transform(diseased_img)
 
         result = {
-            'img1_name': img1_name,
-            'img1': img1,
-            'img2_name': img2_name,
-            'img2': img2
+            'healthy_img_name': healthy_img_name,
+            'diseased_img_name': diseased_img_name,
+            'healthy_img': healthy_img,
+            'diseased_img': diseased_img,
         }
         return result
 
-    def _find_image_path(self, img_name):
-        # Iterate through subdirectories (labels) to find the image
-        for label_folder in os.listdir(self.data_dir):
-            label_folder_path = osp.join(self.data_dir, label_folder)
-            if osp.isdir(label_folder_path):
-                for root, dirs, files in os.walk(label_folder_path):
-                    if img_name in files:
-                        return osp.join(root, img_name)
-
-        raise FileNotFoundError(f"Image '{img_name}' not found in '{self.data_dir}'.")
-
     def __len__(self):
-        return len(self.img_pairs)
+        return len(self.pairs)
 
 
-class VITONDataLoader:
+class LeafDataLoader:
     def __init__(self, opt, dataset):
-        super(VITONDataLoader, self).__init__()
+        super(LeafDataLoader, self).__init__()
 
         if opt.shuffle:
             train_sampler = data.sampler.RandomSampler(dataset)
@@ -77,54 +57,47 @@ class VITONDataLoader:
             train_sampler = None
 
         self.data_loader = data.DataLoader(
-                dataset, batch_size=opt.batch_size, shuffle=(train_sampler is None),
-                num_workers=opt.workers, pin_memory=True, drop_last=True, sampler=train_sampler
+            dataset, batch_size=opt.batch_size, shuffle=(train_sampler is None),
+            num_workers=opt.workers, pin_memory=True, drop_last=True, sampler=train_sampler
         )
         self.dataset = dataset
-        self.data_iter = self.data_loader.__iter__()
+        self.data_iter = iter(self.data_loader)
 
     def next_batch(self):
         try:
-            batch = self.data_iter.__next__()
+            batch = next(self.data_iter)
         except StopIteration:
-            self.data_iter = self.data_loader.__iter__()
-            batch = self.data_iter.__next__()
+            self.data_iter = iter(self.data_loader)
+            batch = next(self.data_iter)
 
         return batch
 
 
-# Example of an Options class
 class Options:
     def __init__(self):
         self.load_height = 256
-        self.load_width = 256
-        self.dataset_dir = './datasets'
-        self.dataset_list = 'test_pairs.txt'
-        self.batch_size = 32
+        self.load_width = 192
+        self.dataset_dir = 'path/to/leaf_dataset'
+        self.dataset_mode = 'segmented'
+        self.batch_size = 4
         self.workers = 4
         self.shuffle = True
 
-# Create options instance
+
 opt = Options()
 
 # Initialize the dataset
 dataset = LeafDataset(opt)
 
-# Verify dataset length
-print(f"Dataset length: {len(dataset)}")
-
 # Initialize the data loader
-data_loader = VITONDataLoader(opt, dataset)
+data_loader = LeafDataLoader(opt, dataset)
 
-# Check for batches
-try:
-    batch = data_loader.next_batch()
-    print("Batch loaded successfully.")
-except StopIteration:
-    print("No more batches available.")
+# Fetch a batch
+batch = data_loader.next_batch()
 
-# Optionally, loop through the data loader to ensure it works correctly
-for i, batch in enumerate(data_loader.data_loader):
-    print(f"Batch {i} loaded successfully.")
-    if i >= 2:  # Limit the number of batches printed
-        break
+# Print batch contents
+print(batch['healthy_img_name'])
+print(batch['diseased_img_name'])
+print(batch['healthy_img'].shape)
+print(batch['diseased_img'].shape)
+
